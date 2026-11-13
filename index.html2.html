@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>我的專屬每日時間規劃表</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    body { font-family: 'Segoe UI', 'Microsoft JhengHei', sans-serif; background-color: #f8fafc; }
+    .loader {
+      border: 3px solid #e2e8f0;
+      border-top: 3px solid #2563eb;
+      border-radius: 50%;
+      width: 22px;
+      height: 22px;
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+  </style>
+</head>
+<body class="text-slate-800 antialiased">
+
+  <!-- 密碼鎖定遮罩畫面 -->
+  <div id="loginScreen" class="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-xl max-w-sm w-full p-6 text-center">
+      <div class="w-14 h-14 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4 text-2xl">
+        <i class="fa-solid fa-lock"></i>
+      </div>
+      <h2 class="text-xl font-bold text-slate-900">私人時間規劃表</h2>
+      <p class="text-sm text-slate-500 mt-1 mb-5">請輸入密碼以解鎖查看與編輯</p>
+      
+      <form onsubmit="handleLogin(event)" class="space-y-3">
+        <input type="password" id="passwordInput" required placeholder="請輸入密碼..." 
+          class="w-full text-center tracking-widest rounded-xl border-slate-300 border p-3 text-base focus:ring-2 focus:ring-blue-500 focus:outline-none">
+        <p id="loginError" class="hidden text-xs text-rose-500 font-medium">密碼錯誤，請再試一次！</p>
+        <button type="submit" id="loginBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-xl transition shadow-sm">
+          解鎖進入
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- 主畫面內容（解鎖後顯示） -->
+  <div id="mainApp" class="hidden max-w-5xl mx-auto p-4 sm:p-6">
+    <!-- 頂部標題與日期控制 -->
+    <header class="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 mb-6 flex flex-col md:flex-row justify-between items-center gap-4">
+      <div>
+        <h1 class="text-2xl font-bold text-slate-900 flex items-center gap-2">
+          <i class="fa-solid fa-calendar-check text-blue-600"></i> 我的每日生活時間規劃表
+        </h1>
+        <p class="text-sm text-slate-500 mt-1" id="dayModeBadge">載入中...</p>
+      </div>
+      
+      <div class="flex flex-wrap items-center gap-2">
+        <div class="flex items-center gap-2 bg-slate-50 p-2 rounded-xl border border-slate-200">
+          <button onclick="changeDate(-1)" class="p-2 hover:bg-slate-200 rounded-lg transition" title="前一天">
+            <i class="fa-solid fa-chevron-left text-slate-600"></i>
+          </button>
+          <input type="date" id="datePicker" onchange="loadTasks()" class="bg-transparent font-semibold text-slate-700 focus:outline-none cursor-pointer">
+          <button onclick="changeDate(1)" class="p-2 hover:bg-slate-200 rounded-lg transition" title="後一天">
+            <i class="fa-solid fa-chevron-right text-slate-600"></i>
+          </button>
+          <button onclick="setToday()" class="ml-1 px-3 py-1.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition">
+            今天
+          </button>
+        </div>
+
+        <button onclick="logout()" class="p-3 bg-slate-100 hover:bg-rose-100 text-slate-600 hover:text-rose-600 rounded-xl transition" title="上鎖登出">
+          <i class="fa-solid fa-right-from-bracket"></i>
+        </button>
+      </div>
+    </header>
+
+    <!-- 快捷一鍵套用課表列 -->
+    <div class="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-2xl border border-blue-100 p-4 mb-6 flex flex-col sm:flex-row justify-between items-center gap-3">
+      <div class="flex items-center gap-2 text-sm text-blue-900 font-medium">
+        <i class="fa-solid fa-wand-magic-sparkles text-blue-600 text-lg"></i>
+        <span>快速排程：一鍵帶入符合當天星期幾的標準作息表</span>
+      </div>
+      <div class="flex flex-wrap gap-2">
+        <button onclick="applyAutoSchedule(false)" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-xl shadow-sm transition flex items-center gap-1.5">
+          <i class="fa-solid fa-calendar-plus"></i> 一鍵套用今日標準課表
+        </button>
+        <button id="lateCramBtn" onclick="applyAutoSchedule(true)" class="hidden px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white text-sm font-semibold rounded-xl shadow-sm transition flex items-center gap-1.5">
+          <i class="fa-solid fa-clock-rotate-left"></i> 切換：補習班10點多晚回家
+        </button>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <!-- 左側：手動新增微調表單 -->
+      <div class="lg:col-span-1">
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 sticky top-6">
+          <h2 class="text-lg font-bold mb-4 text-slate-800 border-b pb-2 flex items-center gap-2">
+            <i class="fa-solid fa-plus-circle text-blue-500"></i> 手動新增 / 微調行程
+          </h2>
+          <form id="taskForm" onsubmit="handleAddTask(event)" class="space-y-4">
+            <div>
+              <label class="block text-sm font-medium text-slate-700 mb-1">活動類別</label>
+              <select id="category" onchange="autoFillTitle()" class="w-full rounded-xl border-slate-300 border p-2.5 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white">
+                <option value="上學時間">🏫 上學時間</option>
+                <option value="補習班上課時間">📚 補習班上課時間</option>
+                <option value="寫功課時間">✍️ 寫功課時間</option>
+                <option value="洗澡時間">🛁 洗澡時間</option>
+                <option value="打電動時間">🎮 打電動時間</option>
+                <option value="看電視時間">📺 看電視時間</option>
+                <option value="畫畫時間">🎨 畫畫時間</option>
+                <option value="吃飯與作息">🍽️ 吃飯 / 睡覺作息</option>
+              </select>
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-slate-700 mb-1">詳細內容 / 備註</label>
+              <input type="text" id="title" required value="去學校上課" class="w-full rounded-xl border-slate-300 border p-2.5 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+            </div>
+
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block text-sm font-medium text-slate-700 mb-1">開始時間</label>
+                <input type="time" id="startTime" required value="07:30" class="w-full rounded-xl border-slate-300 border p-2.5 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-slate-700 mb-1">結束時間</label>
+                <input type="time" id="endTime" required value="15:55" class="w-full rounded-xl border-slate-300 border p-2.5 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+              </div>
+            </div>
+
+            <button type="submit" id="submitBtn" class="w-full bg-slate-800 hover:bg-slate-900 text-white font-semibold py-2.5 px-4 rounded-xl transition flex justify-center items-center gap-2 shadow-sm">
+              <span>加入單筆時間</span>
+            </button>
+          </form>
+        </div>
+      </div>
+
+      <!-- 右側：當日時間軸列表 -->
+      <div class="lg:col-span-2">
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 min-h-[500px]">
+          <div class="flex justify-between items-center mb-4 border-b pb-3">
+            <h2 class="text-lg font-bold text-slate-800" id="listTitle">今日時間軸</h2>
+            <div id="loadingIndicator" class="hidden flex items-center gap-2 text-sm text-blue-600">
+              <div class="loader"></div> <span>同步試算表中...</span>
+            </div>
+          </div>
+
+          <div id="taskList" class="space-y-3"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ★★★ 請將下方引號內的文字，替換成你部署 Google Apps Script 得到的網址 ★★★
+    const GAS_API_URL = "你的_GAS_部署網址_貼在這裡";
+
+    let savedPassword = localStorage.getItem('schedule_pwd') || '';
+
+    const categoryConfig = {
+      '上學時間':       { badge: 'bg-blue-100 text-blue-800 border-blue-200',       border: 'border-l-blue-500',    icon: '🏫', defaultTitle: '去學校上課' },
+      '補習班上課時間': { badge: 'bg-purple-100 text-purple-800 border-purple-200', border: 'border-l-purple-500',  icon: '📚', defaultTitle: '補習班上課' },
+      '寫功課時間':     { badge: 'bg-emerald-100 text-emerald-800 border-emerald-200', border: 'border-l-emerald-500', icon: '✍️', defaultTitle: '寫學校與補習班功課' },
+      '洗澡時間':       { badge: 'bg-cyan-100 text-cyan-800 border-cyan-200',       border: 'border-l-cyan-500',    icon: '🛁', defaultTitle: '洗澡放鬆' },
+      '打電動時間':     { badge: 'bg-rose-100 text-rose-800 border-rose-200',       border: 'border-l-rose-500',    icon: '🎮', defaultTitle: '打電動時間' },
+      '看電視時間':     { badge: 'bg-amber-100 text-amber-800 border-amber-200',    border: 'border-l-amber-500',   icon: '📺', defaultTitle: '看電視休息' },
+      '畫畫時間':       { badge: 'bg-pink-100 text-pink-800 border-pink-200',       border: 'border-l-pink-500',    icon: '🎨', defaultTitle: '自由畫畫創作' },
+      '吃飯與作息':     { badge: 'bg-slate-100 text-slate-700 border-slate-200',    border: 'border-l-slate-400',   icon: '🍽️', defaultTitle: '吃飯 / 準備睡覺' }
+    };
+
+    const weekDayNames = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];
+
+    function getScheduleTemplate(dayOfWeek, isLateCram) {
+      if (dayOfWeek === 1 || dayOfWeek === 3) {
+        return [
+          { startTime: '07:20', endTime: '07:30', category: '上學時間', title: '準時出門去學校' },
+          { startTime: '07:30', endTime: '15:55', category: '上學時間', title: '學校上課、午休' },
+          { startTime: '15:55', endTime: '17:40', category: '看電視時間', title: '放學回家看電視休息、吃點心' },
+          { startTime: '17:40', endTime: '18:15', category: '吃飯與作息', title: '吃晚餐時間' },
+          { startTime: '18:15', endTime: '19:45', category: '寫功課時間', title: '寫今天功課＋預寫補習班作業' },
+          { startTime: '19:45', endTime: '20:15', category: '洗澡時間', title: '洗個舒服的澡' },
+          { startTime: '20:15', endTime: '21:20', category: '畫畫時間', title: '自由畫畫創作時間' },
+          { startTime: '21:20', endTime: '22:00', category: '看電視時間', title: '睡前看電視到 10 點' },
+          { startTime: '22:00', endTime: '22:15', category: '吃飯與作息', title: '整理書包、上床睡覺' }
+        ];
+      }
+
+      if (dayOfWeek === 2 || dayOfWeek === 4) {
+        const base = [
+          { startTime: '07:20', endTime: '07:30', category: '上學時間', title: '準時出門去學校' },
+          { startTime: '07:30', endTime: '15:55', category: '上學時間', title: '學校上課、午休' },
+          { startTime: '15:55', endTime: '16:40', category: '看電視時間', title: '放學吃點心、看電視休息' },
+          { startTime: '16:40', endTime: '17:40', category: '寫功課時間', title: '補習前先寫一部分功課' },
+          { startTime: '17:40', endTime: '18:00', category: '吃飯與作息', title: '吃晚餐、準備補習班課本' }
+        ];
+        if (!isLateCram) {
+          return base.concat([
+            { startTime: '18:00', endTime: '21:00', category: '補習班上課時間', title: '補習班上課' },
+            { startTime: '21:00', endTime: '21:25', category: '洗澡時間', title: '補習回家立刻洗澡' },
+            { startTime: '21:25', endTime: '22:00', category: '看電視時間', title: '洗完澡看電視放鬆到 10 點' },
+            { startTime: '22:00', endTime: '22:15', category: '吃飯與作息', title: '整理書包、上床睡覺' }
+          ]);
+        } else {
+          return base.concat([
+            { startTime: '18:00', endTime: '22:10', category: '補習班上課時間', title: '補習班上課（晚回家模式）' },
+            { startTime: '22:10', endTime: '22:35', category: '洗澡時間', title: '回家趕快洗澡放鬆' },
+            { startTime: '22:35', endTime: '22:45', category: '吃飯與作息', title: '整理書包、直接上床睡覺' }
+          ]);
+        }
+      }
+
+      if (dayOfWeek === 5) {
+        const base = [
+          { startTime: '07:20', endTime: '07:30', category: '上學時間', title: '準時出門去學校' },
+          { startTime: '07:30', endTime: '15:55', category: '上學時間', title: '學校上課、午休' },
+          { startTime: '15:55', endTime: '16:40', category: '看電視時間', title: '放學吃點心、看電視休息' },
+          { startTime: '16:40', endTime: '17:40', category: '寫功課時間', title: '先寫部分作業，週末更輕鬆' },
+          { startTime: '17:40', endTime: '18:00', category: '吃飯與作息', title: '吃晚餐、準備去補習班' }
+        ];
+        if (!isLateCram) {
+          return base.concat([
+            { startTime: '18:00', endTime: '21:00', category: '補習班上課時間', title: '補習班上課' },
+            { startTime: '21:00', endTime: '21:25', category: '洗澡時間', title: '補習回家立刻洗澡' },
+            { startTime: '21:25', endTime: '22:00', category: '看電視時間', title: '洗完澡看電視放鬆' },
+            { startTime: '22:00', endTime: '23:00', category: '打電動時間', title: '週五小週末！專屬打電動 1 小時' },
+            { startTime: '23:00', endTime: '23:10', category: '吃飯與作息', title: '準時關機上床睡覺' }
+          ]);
+        } else {
+          return base.concat([
+            { startTime: '18:00', endTime: '22:10', category: '補習班上課時間', title: '補習班上課（晚回家模式）' },
+            { startTime: '22:10', endTime: '22:30', category: '洗澡時間', title: '回家立刻洗澡' },
+            { startTime: '22:30', endTime: '23:30', category: '打電動時間', title: '週五專屬打電動 1 小時' },
+            { startTime: '23:30', endTime: '23:40', category: '吃飯與作息', title: '準時關機上床睡覺' }
+          ]);
+        }
+      }
+
+      const isSunday = (dayOfWeek === 0);
+      return [
+        { startTime: '08:30', endTime: '09:30', category: '吃飯與作息', title: '睡飽起床、吃早餐' },
+        { startTime: '09:30', endTime: '11:00', category: '寫功課時間', title: '早上頭腦清楚，完成週末功課' },
+        { startTime: '11:00', endTime: '12:00', category: '畫畫時間', title: '早上光線好，自由畫畫創作' },
+        { startTime: '12:00', endTime: '13:00', category: '吃飯與作息', title: '吃午餐、休息準備下午玩遊戲' },
+        { startTime: '13:00', endTime: '15:00', category: '打電動時間', title: '下午 1 點第一波玩遊戲時段！' },
+        { startTime: '15:00', endTime: '17:10', category: '看電視時間', title: '看電視、吃點心或自由休息' },
+        { startTime: '17:10', endTime: '17:40', category: '洗澡時間', title: '晚餐前先洗好澡' },
+        { startTime: '17:40', endTime: '18:00', category: '吃飯與作息', title: '吃晚餐時間' },
+        { startTime: '18:00', endTime: '21:30', category: '打電動時間', title: '晚上 6 點後第二波玩遊戲 / 看電視時段' },
+        { startTime: '21:30', endTime: '22:00', category: '吃飯與作息', title: isSunday ? '整理書包與聯絡簿、準備睡覺' : '睡前收心、準備 10 點睡覺' }
+      ];
+    }
+
+    function autoFillTitle() {
+      const cat = document.getElementById('category').value;
+      const titleInput = document.getElementById('title');
+      if (categoryConfig[cat]) titleInput.value = categoryConfig[cat].defaultTitle;
+    }
+
+    window.onload = function() {
+      if (savedPassword) {
+        setToday();
+      }
+    };
+
+    // 處理密碼登入驗證
+    async function handleLogin(e) {
+      e.preventDefault();
+      const inputPwd = document.getElementById('passwordInput').value;
+      const btn = document.getElementById('loginBtn');
+      const errText = document.getElementById('loginError');
+
+      btn.disabled = true;
+      btn.innerText = '驗證中...';
+      errText.classList.add('hidden');
+
+      savedPassword = inputPwd;
+      const success = await setToday(true);
+
+      btn.disabled = false;
+      btn.innerText = '解鎖進入';
+
+      if (success) {
+        localStorage.setItem('schedule_pwd', inputPwd);
+        document.getElementById('loginScreen').classList.add('hidden');
+        document.getElementById('mainApp').classList.remove('hidden');
+      } else {
+        savedPassword = '';
+        localStorage.removeItem('schedule_pwd');
+        errText.classList.remove('hidden');
+      }
+    }
+
+    function logout() {
+      localStorage.removeItem('schedule_pwd');
+      savedPassword = '';
+      document.getElementById('passwordInput').value = '';
+      document.getElementById('mainApp').classList.add('hidden');
+      document.getElementById('loginScreen').classList.remove('hidden');
+    }
+
+    async function setToday(isInitialCheck = false) {
+      const today = new Date();
+      const yyyy = today.getFullYear();
+      const mm = String(today.getMonth() + 1).padStart(2, '0');
+      const dd = String(today.getDate()).padStart(2, '0');
+      document.getElementById('datePicker').value = `${yyyy}-${mm}-${dd}`;
+      return await loadTasks(isInitialCheck);
+    }
+
+    function changeDate(days) {
+      const picker = document.getElementById('datePicker');
+      const parts = picker.value.split('-');
+      const current = new Date(parts[0], parts[1] - 1, parts[2]);
+      current.setDate(current.getDate() + days);
+      const yyyy = current.getFullYear();
+      const mm = String(current.getMonth() + 1).padStart(2, '0');
+      const dd = String(current.getDate()).padStart(2, '0');
+      picker.value = `${yyyy}-${mm}-${dd}`;
+      loadTasks();
+    }
+
+    function updateDayInfo(dateStr) {
+      const parts = dateStr.split('-');
+      const d = new Date(parts[0], parts[1] - 1, parts[2]);
+      const dayOfWeek = d.getDay();
+      const dayName = weekDayNames[dayOfWeek];
+      
+      let modeText = '';
+      const lateBtn = document.getElementById('lateCramBtn');
+
+      if (dayOfWeek === 1 || dayOfWeek === 3) {
+        modeText = '無補習・無打電動日（22:00 睡覺）';
+        lateBtn.classList.add('hidden');
+      } else if (dayOfWeek === 2 || dayOfWeek === 4) {
+        modeText = '補習班上課日（18:00-21:00・22:00 睡覺）';
+        lateBtn.classList.remove('hidden');
+      } else if (dayOfWeek === 5) {
+        modeText = '小週末補習＋打電動 1 小時日（23:00 睡覺）';
+        lateBtn.classList.remove('hidden');
+      } else {
+        modeText = '假日雙時段遊戲日（13:00 及 18:00 後・22:00 睡覺）';
+        lateBtn.classList.add('hidden');
+      }
+
+      document.getElementById('listTitle').innerText = `${dateStr}（${dayName}）時間軸`;
+      document.getElementById('dayModeBadge').innerText = `今日模式：${modeText}`;
+    }
+
+    async function loadTasks(isInitialCheck = false) {
+      const date = document.getElementById('datePicker').value;
+      updateDayInfo(date);
+
+      if (GAS_API_URL.includes("你的_GAS")) {
+        alert("請先在 index.html 程式碼中填入你的 Google Apps Script 部署網址！");
+        return false;
+      }
+
+      showLoading(true);
+      try {
+        const res = await fetch(`${GAS_API_URL}?date=${date}&pwd=${encodeURIComponent(savedPassword)}`);
+        const data = await res.json();
+
+        if (data.error === 'UNAUTHORIZED') {
+          showLoading(false);
+          if (!isInitialCheck) logout();
+          return false;
+        }
+
+        if (!isInitialCheck) {
+          document.getElementById('loginScreen').classList.add('hidden');
+          document.getElementById('mainApp').classList.remove('hidden');
+        }
+        renderTasks(data);
+        return true;
+      } catch (err) {
+        alert('讀取資料失敗：' + err);
+        showLoading(false);
+        return false;
+      }
+    }
+
+    async function postToGas(payload) {
+      showLoading(true);
+      payload.pwd = savedPassword;
+      try {
+        const res = await fetch(GAS_API_URL, {
+          method: 'POST',
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (data.error === 'UNAUTHORIZED') {
+          alert('密碼驗證失效，請重新登入！');
+          logout();
+          return;
+        }
+        await loadTasks();
+      } catch (err) {
+        alert('同步失敗：' + err);
+        showLoading(false);
+      }
+    }
+
+    function applyAutoSchedule(isLateCram) {
+      const dateStr = document.getElementById('datePicker').value;
+      const parts = dateStr.split('-');
+      const d = new Date(parts[0], parts[1] - 1, parts[2]);
+      const dayOfWeek = d.getDay();
+
+      const msg = isLateCram 
+        ? '確定要切換成「補習班 10 點多晚回家模式」嗎？（會覆蓋當天的既有排程）' 
+        : `確定要一鍵帶入「${weekDayNames[dayOfWeek]}」的標準作息表嗎？（會覆蓋當天的既有排程）`;
+      
+      if (!confirm(msg)) return;
+      const template = getScheduleTemplate(dayOfWeek, isLateCram);
+      postToGas({ action: 'applyTemplate', date: dateStr, tasks: template });
+    }
+
+    function renderTasks(tasks) {
+      showLoading(false);
+      const container = document.getElementById('taskList');
+      container.innerHTML = '';
+
+      if (!tasks || tasks.length === 0) {
+        container.innerHTML = `
+          <div class="text-center py-16 text-slate-400">
+            <i class="fa-solid fa-wand-magic-sparkles text-4xl mb-3 block text-blue-300"></i>
+            <p class="font-medium text-slate-600">這天還沒有安排行程喔！</p>
+            <p class="text-sm mt-1">點擊上方藍色的「一鍵套用今日標準課表」就能馬上排好整天作息</p>
+          </div>`;
+        return;
+      }
+
+      tasks.forEach(task => {
+        const config = categoryConfig[task.category] || { 
+          badge: 'bg-slate-100 text-slate-800 border-slate-200', 
+          border: 'border-l-slate-400', 
+          icon: '📌' 
+        };
+        const isDone = task.completed;
+
+        const card = document.createElement('div');
+        card.className = `flex items-center justify-between p-4 rounded-xl border border-slate-200 border-l-4 ${config.border} transition ${isDone ? 'bg-slate-50 opacity-60' : 'bg-white hover:shadow-md'}`;
+        
+        card.innerHTML = `
+          <div class="flex items-center gap-4">
+            <input type="checkbox" ${isDone ? 'checked' : ''} onchange="toggleTask('${task.id}')" 
+              class="w-5 h-5 text-blue-600 rounded focus:ring-blue-500 cursor-pointer">
+            <div>
+              <div class="flex flex-wrap items-center gap-2">
+                <span class="font-mono text-sm font-bold text-slate-700 bg-slate-100 px-2.5 py-0.5 rounded-md">
+                  ${task.startTime} - ${task.endTime}
+                </span>
+                <span class="text-xs font-semibold px-2.5 py-0.5 rounded-full border ${config.badge}">
+                  ${config.icon} ${task.category}
+                </span>
+              </div>
+              <p class="font-semibold text-slate-800 mt-1.5 ${isDone ? 'line-through text-slate-400' : ''}">
+                ${escapeHtml(task.title)}
+              </p>
+            </div>
+          </div>
+          <button onclick="removeTask('${task.id}')" class="text-slate-400 hover:text-rose-500 p-2 rounded-lg hover:bg-rose-50 transition" title="刪除">
+            <i class="fa-solid fa-trash-can"></i>
+          </button>
+        `;
+        container.appendChild(card);
+      });
+    }
+
+    async function handleAddTask(e) {
+      e.preventDefault();
+      const startTime = document.getElementById('startTime').value;
+      const endTime = document.getElementById('endTime').value;
+
+      if (startTime >= endTime) {
+        alert('結束時間必須晚於開始時間！');
+        return;
+      }
+
+      const task = {
+        date: document.getElementById('datePicker').value,
+        category: document.getElementById('category').value,
+        title: document.getElementById('title').value,
+        startTime: startTime,
+        endTime: endTime
+      };
+
+      const btn = document.getElementById('submitBtn');
+      btn.disabled = true;
+      btn.innerHTML = '<div class="loader"></div>';
+
+      await postToGas({ action: 'add', task: task });
+      btn.disabled = false;
+      btn.innerHTML = '<span>加入單筆時間</span>';
+    }
+
+    function toggleTask(id) {
+      postToGas({ action: 'toggle', id: id });
+    }
+
+    function removeTask(id) {
+      if (!confirm('確定要刪除這個時間安排嗎？')) return;
+      postToGas({ action: 'delete', id: id });
+    }
+
+    function showLoading(show) {
+      const loader = document.getElementById('loadingIndicator');
+      if (show) loader.classList.remove('hidden');
+      else loader.classList.add('hidden');
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.innerText = text;
+      return div.innerHTML;
+    }
+  </script>
+</body>
+</html>
